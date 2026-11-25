@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SHAMLOKO</title>
+<style>
+:root{--bg:#0f1b2d;--card:#172740;--g:#1faa59;--t:#fff;--m:#9fb0c8}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:15px system-ui,sans-serif;padding-bottom:70px}
+header{padding:14px 16px;font-weight:800;letter-spacing:2px;display:flex;justify-content:space-between;align-items:center}
+header b{color:var(--g)}main{padding:0 16px 16px;max-width:640px;margin:auto}
+.card{background:var(--card);border-radius:12px;padding:14px;margin:10px 0}
+.big{font-size:28px;font-weight:800;color:var(--g)}.sm{color:var(--m);font-size:12px;letter-spacing:1px}
+input,select,textarea,button{width:100%;padding:12px;margin:5px 0;border-radius:8px;border:1px solid #2c4062;background:#0c1626;color:var(--t);font:inherit}
+button{background:var(--g);border:0;font-weight:700}button.alt{background:#2c4062}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#0a1322;border-top:1px solid #2c4062}
+nav button{background:none;border-radius:0;margin:0;color:var(--m);font-size:13px}nav button.on{color:var(--g)}
+nav button.post{color:#fff;background:var(--g)}
+.err{color:#ff7b7b}.tag{display:inline-block;background:#0c1626;border-radius:6px;padding:2px 8px;font-size:12px;margin-right:6px;color:var(--m)}
+</style></head><body>
+<header><span>SHAM<b>LOKO</b></span><span id="loc" class="sm"></span></header>
+<main id="app">Loading…</main>
+<nav id="nav" hidden></nav>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL='https://arfsggndgyezukwuvmad.supabase.co', SUPABASE_ANON_KEY='sb_publishable_Wso8pBQlyjISd5Qqv-FqyQ_J0fQSHor'; // anon key only, never the service key
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const $=s=>document.querySelector(s), app=$('#app');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const K=n=>'K'+Number(n||0).toLocaleString('en-US');
+const S={user:null,profile:null,prov:[],dist:[],cats:[],tab:'home',busy:false};
+const opts=(a,sel)=>a.map(x=>`<option value="${x.id}" ${x.id==sel?'selected':''}>${esc(x.name)}</option>`).join('');
+const dOpts=(pid,sel)=>opts(S.dist.filter(d=>d.province_id==pid),sel);
+
+async function boot(){
+  const {data:{session}}=await db.auth.getSession();
+  const [p,d,c]=await Promise.all([db.from('provinces').select('*').order('name'),db.from('districts').select('*').order('name'),db.from('categories').select('*').eq('active',true).order('name')]);
+  S.prov=p.data||[];S.dist=d.data||[];S.cats=c.data||[];
+  if(!session) return authView();
+  S.user=session.user; await loadProfile();
+}
+async function loadProfile(){
+  const {data}=await db.from('profiles').select('*').eq('id',S.user.id).maybeSingle();
+  S.profile=data; data?main():setupView();
+}
+function authView(){
+  $('#nav').hidden=true;
+  app.innerHTML=`<div class="card"><h2>One person's problem is another person's opportunity</h2>
+  <input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password (6+ characters)">
+  <button id="in">Log in</button><button class="alt" id="up">Create account</button><div id="msg" class="err"></div></div>`;
+  const go=async fn=>{const {error}=await fn({email:$('#em').value.trim(),password:$('#pw').value});
+    if(error)$('#msg').textContent=error.message;else boot();};
+  $('#in').onclick=()=>go(db.auth.signInWithPassword.bind(db.auth));
+  $('#up').onclick=()=>go(db.auth.signUp.bind(db.auth));
+}
+function setupView(){
+  $('#nav').hidden=true;
+  app.innerHTML=`<div class="card"><h3>Your profile</h3>
+  <input id="fn" placeholder="Full name"><input id="ph" placeholder="Phone (e.g. 097...)">
+  <textarea id="bio" placeholder="Short bio"></textarea><input id="sk" placeholder="Skills, comma separated">
+  <div class="sm">HOME LOCATION</div><select id="hp">${opts(S.prov)}</select><select id="hd"></select>
+  <div class="sm">WORKING LOCATION (you can change it later)</div><select id="wp">${opts(S.prov)}</select><select id="wd"></select>
+  <button id="sv">Save and continue</button><div id="msg" class="err"></div></div>`;
+  const link=(p,d)=>{const f=()=>$(d).innerHTML=dOpts($(p).value);$(p).onchange=f;f();};
+  link('#hp','#hd');link('#wp','#wd');
+  $('#sv').onclick=async()=>{
+    const name=$('#fn').value.trim(); if(!name) return $('#msg').textContent='Enter your full name';
+    const {error}=await db.from('profiles').insert({id:S.user.id,full_name:name,phone:$('#ph').value.trim(),email:S.user.email,bio:$('#bio').value.trim(),
+      skills:$('#sk').value.split(',').map(s=>s.trim()).filter(Boolean),home_district_id:+$('#hd').value,working_district_id:+$('#wd').value});
+    error?$('#msg').textContent=error.message:loadProfile();};
+}
+function main(){
+  const n=$('#nav');n.hidden=false;
+  n.innerHTML=[['home','Home'],['explore','Explore'],['post','Post a Job'],['activity','Activity'],['me','Profile']].map(([k,l])=>`<button data-t="${k}" class="${k==S.tab?'on':''} ${k=='post'?'post':''}">${l}</button>`).join('');
+  n.onclick=e=>{const t=e.target.dataset.t;if(t){S.tab=t;main();}};
+  const dn=S.dist.find(d=>d.id==S.profile.working_district_id);
+  $('#loc').textContent=dn?dn.name.toUpperCase():'';
+  ({home:homeView,explore:exploreView,post:postView,activity:activityView,me:meView})[S.tab]();
+}
+const jobCard=j=>`<div class="card job" data-id="${j.id}"><b>${esc(j.title)}</b><div class="big" style="font-size:20px">${K(j.budget_zmw)}</div>
+ ${j._app?'<span class="tag">Application: '+esc(j._app)+'</span>':''}${j.status&&!ACTIVE.includes(j.status)?'<span class="tag">'+esc(j.status)+'</span>':''}<span class="tag">${j.arrangement=='virtual'?'Virtual':'Physical'}</span><span class="tag">${esc(j.categories?.name||'Other')}</span><span class="tag">${esc(j.districts?.name||'Anywhere in Zambia')}</span>
+ <div class="sm">Posted ${new Date(j.created_at).toLocaleDateString()}${j.deadline?' · Deadline '+new Date(j.deadline).toLocaleDateString():''}</div></div>`;
+const JSEL_OLD='id,title,budget_zmw,arrangement,created_at,deadline,districts(name),categories(name)';
+const ACTIVE=['published','applications_open'];
+async function homeView(){
+  app.innerHTML='<div class="card">Loading…</div>';
+  const wd=S.profile.working_district_id;
+  const [nat,loc,jobs]=await Promise.all([
+    db.from('opportunity_value_national').select('*').single(),
+    db.from('opportunity_value_by_district').select('*').eq('district_id',wd).maybeSingle(),
+    db.from('jobs').select(JSEL).in('status',ACTIVE).is('deleted_at',null).or(`district_id.eq.${wd},arrangement.eq.virtual`).order('created_at',{ascending:false}).limit(20)]);
+  const dn=S.dist.find(d=>d.id==wd)?.name||'Your area';
+  if(nat.error||jobs.error) return app.innerHTML=`<div class="card err">Network or setup error: ${esc((nat.error||jobs.error).message)}</div>`;
+  app.innerHTML=`<div class="card"><div class="sm">ZAMBIA — ACTIVE OPPORTUNITIES</div><div class="big">${K(nat.data.active_value)}</div><div class="sm">${K(nat.data.posted_today)} posted today · ${nat.data.active_jobs} jobs</div></div>
+  <div class="card"><div class="sm">${esc(dn.toUpperCase())} — ACTIVE OPPORTUNITIES</div><div class="big">${K(loc.data?.active_value)}</div><div class="sm">${K(loc.data?.posted_today)} posted today</div></div>
+  <button id="hire">Need someone? Post a job</button><h3>Opportunities near you</h3>`
+  +(jobs.data.length?jobs.data.map(jobCard).join(''):'<div class="card sm">No opportunities in your area yet. Be the first to post one, or browse nationwide in Explore.</div>');
+  $('#hire').onclick=()=>{S.tab='post';main();};
+}
+async function exploreView(){
+  app.innerHTML=`<input id="q" placeholder="Search jobs"><select id="c"><option value="">All categories</option>${opts(S.cats)}</select>
+  <select id="a"><option value="">Physical & virtual</option><option value="physical">Physical</option><option value="virtual">Virtual</option></select>
+  <select id="o"><option value="created_at">Newest</option><option value="budget_zmw">Highest paying</option></select><div id="res"></div>`;
+  const run=async()=>{let q=db.from('jobs').select(JSEL).in('status',ACTIVE).is('deleted_at',null);
+    if($('#q').value.trim())q=q.ilike('title','%'+$('#q').value.trim().replace(/[%,]/g,'')+'%');
+    if($('#c').value)q=q.eq('category_id',$('#c').value);if($('#a').value)q=q.eq('arrangement',$('#a').value);
+    const {data,error}=await q.order($('#o').value,{ascending:false}).limit(30);
+    $('#res').innerHTML=error?`<div class="err">${esc(error.message)}</div>`:data.length?data.map(jobCard).join(''):'<div class="card sm">No matching opportunities.</div>';};
+  ['q','c','a','o'].forEach(i=>$('#'+i).onchange=run);run();
+}
+function postView(){
+  app.innerHTML=`<div class="card"><h3>Post a job or problem</h3>
+  <input id="t" placeholder="Title"><textarea id="d" placeholder="Describe what needs doing"></textarea>
+  <select id="c">${opts(S.cats)}</select><input id="b" type="number" min="1" placeholder="Budget (ZMW)">
+  <select id="ty"><option value="one_time">One-time task</option><option value="recurring">Recurring</option><option value="temporary">Temporary employment</option><option value="permanent">Permanent employment</option><option value="freelance">Freelance project</option><option value="contract">Contract</option></select>
+  <select id="ar"><option value="physical">Physical (someone must travel)</option><option value="virtual">Virtual (remote)</option></select>
+  <div id="loc2"><select id="p">${opts(S.prov,S.dist.find(d=>d.id==S.profile.working_district_id)?.province_id)}</select><select id="di"></select></div>
+  <label class="sm"><input id="ng" type="checkbox" style="width:auto"> Negotiable</label>
+  <button id="go">Publish</button><div id="msg" class="err"></div></div>`;
+  const cur=S.profile.working_district_id;
+  const f=()=>{$('#di').innerHTML=dOpts($('#p').value,cur);};$('#p').onchange=f;f();
+  $('#ar').onchange=()=>$('#loc2').hidden=$('#ar').value=='virtual';
+  $('#go').onclick=async()=>{
+    if(S.busy)return;const t=$('#t').value.trim(),b=+$('#b').value;
+    if(t.length<5||!$('#d').value.trim()||!(b>0))return $('#msg').textContent='Add a title (5+ characters), description and budget.';
+    S.busy=true;$('#go').textContent='Publishing…';
+    const v=$('#ar').value=='virtual';
+    const {error}=await db.from('jobs').insert({poster_id:S.user.id,title:t,description:$('#d').value.trim(),category_id:+$('#c').value,budget_zmw:b,
+      negotiable:$('#ng').checked,opportunity_type:$('#ty').value,arrangement:$('#ar').value,district_id:v?null:+$('#di').value});
+    S.busy=false;$('#go').textContent='Publish';
+    if(error)$('#msg').textContent=error.message;else{S.tab='home';main();}};
+}
+async function meView(){
+  const p=S.profile;
+  app.innerHTML=`<div class="card"><h3>${esc(p.full_name)}</h3><div class="sm">${esc(p.email||'')} · ${esc(p.verification_status)}</div>
+  <p>Free postings used: ${p.posts_created}/5<br>Free applications used: ${p.applications_made}/5</p></div>
+  <div class="card"><div class="sm">CHANGE WORKING LOCATION</div><select id="p">${opts(S.prov,S.dist.find(d=>d.id==p.working_district_id)?.province_id)}</select><select id="di"></select>
+  <button id="sv">Update location</button></div><button class="alt" id="out">Log out</button>`;
+  const f=()=>$('#di').innerHTML=dOpts($('#p').value,p.working_district_id);$('#p').onchange=f;f();
+  $('#sv').onclick=async()=>{const {error}=await db.from('profiles').update({working_district_id:+$('#di').value}).eq('id',p.id);
+    if(!error){S.profile.working_district_id=+$('#di').value;S.tab='home';main();}};
+  $('#out').onclick=async()=>{await db.auth.signOut();S.profile=null;boot();};
+}
+document.addEventListener('click',e=>{const c=e.target.closest('.job');if(c)jobView(c.dataset.id);});
+async function jobView(id){
+  app.innerHTML='<div class="card">Loading…</div>';
+  const {data:j,error}=await db.from('jobs').select('*,districts(name),categories(name)').eq('id',id).single();
+  if(error)return app.innerHTML=`<div class="card err">${esc(error.message)}</div>`;
+  const mine=j.poster_id==S.user.id,open=ACTIVE.includes(j.status);
+  let h=`<button class="alt" id="bk">← Back</button><div class="card"><h3>${esc(j.title)}</h3><div class="big" style="font-size:22px">${K(j.budget_zmw)}</div><span class="tag">${esc(j.status)}</span><span class="tag">${j.negotiable?'Negotiable':'Fixed price'}</span><span class="tag">${esc(j.districts?.name||'Anywhere in Zambia')}</span><p>${esc(j.description)}</p></div>`;
+  if(mine){
+    const {data:ap}=await db.from('job_applications').select('*,profiles(full_name,verification_status)').eq('job_id',id).order('created_at');
+    h+='<h3>Applicants</h3>'+(ap&&ap.length?ap.map(a=>`<div class="card"><b>${esc(a.profiles?.full_name)}</b> <span class="tag">${esc(a.status)}</span><p>${esc(a.intro)}</p><div class="sm">${a.proposed_price_zmw?'Offer '+K(a.proposed_price_zmw)+' · ':''}${esc(a.estimated_time||'')}</div>${a.status=='pending'&&open?`<button data-acc="${a.id}">Accept</button><button class="alt" data-rej="${a.id}">Reject</button>`:''}</div>`).join(''):'<div class="card sm">No applications yet.</div>');
+    const nx={assigned:['in_progress','Start work'],in_progress:['completed','Mark completed']}[j.status];
+    if(nx)h+=`<button data-st="${nx[0]}">${nx[1]}</button>`;
+    if(['published','applications_open','assigned','in_progress'].includes(j.status))h+=`<button class="alt" data-st="cancelled">Cancel job</button>`;
+    if(j.status=='completed')h+='<div class="card sm">Payment is settled directly between you and the worker. Off-platform payments are not covered by platform protection.</div>';
+  }else if(open){
+    const {data:mineApp}=await db.from('job_applications').select('id').eq('job_id',id).eq('applicant_id',S.user.id).maybeSingle();
+    h+=mineApp?'<div class="card sm">You have applied for this job.</div>':`<div class="card"><h3>Apply</h3><textarea id="in" placeholder="Introduce yourself and your relevant skills"></textarea>${j.negotiable?'<input id="pr" type="number" min="1" placeholder="Your price (ZMW)">':''}<input id="tm" placeholder="Estimated time (e.g. 2 days)"><input id="pf" placeholder="Portfolio link (optional)"><button id="ap">Send application</button><div id="msg" class="err"></div></div>`;
+  }
+  app.innerHTML=h;
+  $('#bk').onclick=()=>main();
+  const act=async(p,msg)=>{const {error}=await p;error?alert(error.message):jobView(id);};
+  app.querySelectorAll('[data-acc]').forEach(b=>b.onclick=()=>act(db.rpc('accept_application',{app_id:b.dataset.acc})));
+  app.querySelectorAll('[data-rej]').forEach(b=>b.onclick=()=>act(db.from('job_applications').update({status:'rejected'}).eq('id',b.dataset.rej)));
+  app.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>confirm('Are you sure?')&&act(db.rpc('set_job_status',{p_job:id,p_status:b.dataset.st})));
+  if($('#ap'))$('#ap').onclick=async()=>{
+    if(S.busy)return;if(!$('#in').value.trim())return $('#msg').textContent='Write a short introduction.';
+    S.busy=true;$('#ap').textContent='Sending…';
+    const {error}=await db.from('job_applications').insert({job_id:id,applicant_id:S.user.id,intro:$('#in').value.trim(),
+      proposed_price_zmw:$('#pr')&&$('#pr').value?+$('#pr').value:null,estimated_time:$('#tm').value.trim(),portfolio_url:$('#pf').value.trim()});
+    S.busy=false;error?($('#ap').textContent='Send application',$('#msg').textContent=error.message):jobView(id);};
+}
+async function activityView(){
+  app.innerHTML='<div class="card">Loading…</div>';
+  const [a,b]=await Promise.all([
+    db.from('jobs').select(JSEL+',status').eq('poster_id',S.user.id).is('deleted_at',null).order('created_at',{ascending:false}),
+    db.from('job_applications').select('status,jobs('+JSEL+',status)').eq('applicant_id',S.user.id).order('created_at',{ascending:false})]);
+  const mineJobs=a.data||[],apps=(b.data||[]).filter(x=>x.jobs);
+  app.innerHTML='<h3>Jobs I posted</h3>'+(mineJobs.length?mineJobs.map(jobCard).join(''):'<div class="card sm">You have not posted any jobs yet.</div>')
+   +'<h3>My applications</h3>'+(apps.length?apps.map(x=>jobCard({...x.jobs,_app:x.status})).join(''):'<div class="card sm">You have not applied for any jobs yet.</div>');
+}
+</script>
+<style>
+:root{--bg:#f6f8f7;--card:#fff;--g:#079455;--g2:#087647;--t:#17231d;--m:#718078;--line:#e5ebe7;--soft:#edf7f1}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:15px Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;padding-bottom:82px}
+header{position:sticky;top:0;z-index:5;background:rgba(255,255,255,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:15px 18px}
+header b{color:var(--g)}main{padding:18px 16px 28px;max-width:720px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:17px;padding:16px;margin:12px 0;box-shadow:0 3px 14px rgba(20,50,35,.035)}
+.big{font-size:25px;font-weight:850;color:var(--g)}.sm{color:var(--m);font-size:12px;letter-spacing:.25px}
+h1{font-size:28px;line-height:1.12;letter-spacing:-1px;margin:14px 0 5px}h2{font-size:21px}h3{font-size:17px;margin:8px 0 12px}
+input,select,textarea,button{width:100%;padding:13px 14px;margin:5px 0;border-radius:11px;border:1px solid var(--line);background:#fff;color:var(--t);font:inherit;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--g);box-shadow:0 0 0 3px rgba(7,148,85,.1)}textarea{min-height:95px}
+button{background:var(--g);border-color:var(--g);color:white;font-weight:750;cursor:pointer}button.alt{background:#fff;color:var(--t);border-color:var(--line)}button.soft{background:var(--soft);color:var(--g2);border-color:transparent}
+nav{position:fixed;bottom:0;left:0;right:0;z-index:10;display:flex;background:rgba(255,255,255,.97);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{background:none;border:0;border-radius:0;margin:0;color:var(--m);font-size:11px;padding:11px 2px;display:flex;flex-direction:column;align-items:center;gap:4px}
+nav button.on{color:var(--g);font-weight:800}nav button.post{background:var(--g);color:white;margin:6px 4px;border-radius:12px}
+.err{color:#c0392b}.tag{display:inline-block;background:#f0f4f1;border-radius:7px;padding:4px 8px;font-size:11px;margin:3px 4px 3px 0;color:#52635a}
+.row{display:flex;gap:9px;align-items:center}.between{display:flex;justify-content:space-between;align-items:center;gap:10px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.pillrow{display:flex;gap:7px;overflow-x:auto;padding:4px 0 8px}.pillrow button{white-space:nowrap;width:auto;padding:9px 13px;border-radius:999px;background:white;color:var(--m);border:1px solid var(--line);font-size:12px}.pillrow button.active{background:var(--soft);color:var(--g2);border-color:#ccebd9}
+.catgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.cat{background:white;border:1px solid var(--line);border-radius:13px;padding:12px 5px;text-align:center;font-size:11px}.cat .ico{font-size:20px;display:block;margin-bottom:5px}
+.job{cursor:pointer}.avatar{width:76px;height:76px;border-radius:50%;object-fit:cover;background:var(--soft);border:1px solid var(--line)}
+.sectionhead{display:flex;align-items:center;justify-content:space-between;margin:20px 0 7px}.profiletabs{display:flex;gap:6px;overflow-x:auto;margin:12px 0}.profiletabs button{width:auto;white-space:nowrap;font-size:12px;padding:9px 12px}
+.stat{background:var(--soft);border-radius:13px;padding:12px}.stat strong{display:block;font-size:20px;color:var(--g)}.hidden{display:none!important}label{font-size:12px;color:var(--m);display:block;margin-top:8px}
+</style>
+<script>
+(()=>{
+const P3={bucket:'avatars'};
+S.tab='home';S.profileSection='overview';S.exploreFilter='all';
+const iconFor=n=>({'Construction':'🧱','Agriculture':'🌱','Transport':'🚚','Cleaning':'🧹','Graphic design':'🎨','Technology':'💻','Education':'📚','Other':'✨'}[n]||'✦');
+const dateText=v=>v?new Date(v+'T00:00:00').toLocaleDateString():'Not specified';
+function navView(){
+ const n=$('#nav');n.hidden=false;
+ const items=[['home','⌂','Home'],['explore','⌕','Explore'],['post','＋','Post a Job'],['me','●','Profile']];
+ n.innerHTML=items.map(([k,i,l])=>`<button data-t="${k}" class="${k===S.tab?'on':''} ${k==='post'?'post':''}"><span style="font-size:19px">${i}</span>${l}</button>`).join('');
+ n.onclick=e=>{const t=e.target.closest('button')?.dataset.t;if(t){S.tab=t;main();}};
+}
+function main(){
+ navView();const dn=S.dist.find(d=>d.id==S.profile?.working_district_id);$('#loc').textContent=dn?dn.name.toUpperCase():'ZAMBIA';
+ ({home:homeView,explore:exploreView,post:postView,me:meView})[S.tab]();
+}
+const JSEL='id,title,budget_zmw,arrangement,created_at,deadline,status,classification,start_date,completion_date,requirements,employer_name,district_id,districts(name),categories(name)';
+function jobCard(j){
+ return `<div class="card job" data-id="${j.id}"><div class="between"><b>${esc(j.title)}</b><span class="big" style="font-size:20px">${K(j.budget_zmw)}</span></div>
+ <div><span class="tag">${j.classification==='official'?'Official':'Unofficial'}</span><span class="tag">${j.arrangement==='virtual'?'Virtual':'Physical'}</span><span class="tag">${esc(j.categories?.name||'Opportunity')}</span></div>
+ <div class="sm">${esc(j.districts?.name||'Anywhere in Zambia')} · ${dateText(j.created_at?.slice(0,10))}</div></div>`;
+}
+async function homeView(){
+ app.innerHTML='<div class="card">Loading opportunities…</div>';const wd=S.profile.working_district_id;
+ const [nat,loc,jobs]=await Promise.all([
+  db.from('opportunity_value_national').select('*').single(),
+  db.from('opportunity_value_by_district').select('*').eq('district_id',wd).maybeSingle(),
+  db.from('jobs').select(JSEL).in('status',ACTIVE).is('deleted_at',null).or(`district_id.eq.${wd},arrangement.eq.virtual`).order('created_at',{ascending:false}).limit(40)
+ ]);
+ if(nat.error||jobs.error){app.innerHTML=`<div class="card err">Could not load opportunities: ${esc((nat.error||jobs.error).message)}</div>`;return;}
+ const dn=S.dist.find(d=>d.id==wd)?.name||'Your area',cards=jobs.data||[];
+ const featured=cards.filter(j=>j.featured===true),highest=[...cards].sort((a,b)=>(b.budget_zmw||0)-(a.budget_zmw||0)).slice(0,4);
+ const section=(title,arr)=>`<div class="sectionhead"><h3>${title}</h3><span class="sm">${arr.length} found</span></div>${arr.length?arr.slice(0,5).map(jobCard).join(''):'<div class="card sm">No opportunities available yet.</div>'}`;
+ app.innerHTML=`<h1>Find opportunities.<br><span style="color:var(--g)">Make things happen.</span></h1>
+ <input id="homeq" placeholder="⌕  Search jobs, skills or services…">
+ <div class="grid2"><button id="find">Find Work</button><button class="alt" id="hire">Post Work</button></div>
+ <div class="grid2"><div class="stat"><div class="sm">ZAMBIA · ACTIVE VALUE</div><strong>${K(nat.data.active_value)}</strong><div class="sm">${nat.data.active_jobs||0} active jobs</div></div><div class="stat"><div class="sm">${esc(dn.toUpperCase())} · ACTIVE VALUE</div><strong>${K(loc.data?.active_value)}</strong><div class="sm">${loc.data?.active_jobs||0} active jobs</div></div></div>
+ <div class="sectionhead"><h3>Explore categories</h3><span class="sm">See all</span></div><div class="catgrid">${S.cats.slice(0,8).map(c=>`<div class="cat" data-cat="${c.id}"><span class="ico">${iconFor(c.name)}</span>${esc(c.name)}</div>`).join('')}</div>
+ ${section('Featured opportunities',featured)}${section('Latest opportunities',cards)}${section('Opportunities near you',cards.filter(j=>j.district_id==wd||j.arrangement==='virtual'))}${section('Highest-paying opportunities',highest)}`;
+ $('#find').onclick=()=>{S.tab='explore';main();};$('#hire').onclick=()=>{S.tab='post';main();};
+ $('#homeq').onkeydown=e=>{if(e.key==='Enter'){S.search=e.target.value;S.tab='explore';main();}};
+ app.querySelectorAll('[data-cat]').forEach(x=>x.onclick=()=>{S.category=x.dataset.cat;S.tab='explore';main();});
+}
+async function exploreView(){
+ app.innerHTML=`<h2>Explore opportunities</h2><input id="q" placeholder="Search jobs, skills or services…" value="${esc(S.search||'')}">
+ <div class="pillrow" id="filters">${[['all','All'],['official','Official'],['unofficial','Unofficial'],['virtual','Virtual'],['physical','Physical']].map(([v,l])=>`<button data-f="${v}" class="${S.exploreFilter===v?'active':''}">${l}</button>`).join('')}</div>
+ <div class="grid2"><select id="c"><option value="">All categories</option>${opts(S.cats,S.category)}</select><input id="maxb" type="number" min="0" placeholder="Maximum budget (K)"></div>
+ <div class="grid2"><select id="district"><option value="">All Zambia</option>${S.dist.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('')}</select><select id="sort"><option value="created_at">Newest first</option><option value="budget_zmw">Highest paying</option></select></div><div id="res"><div class="card">Loading…</div></div>`;
+ const run=async()=>{let q=db.from('jobs').select(JSEL).in('status',ACTIVE).is('deleted_at',null);const term=$('#q').value.trim().replace(/[%,]/g,'');
+  if(term)q=q.ilike('title','%'+term+'%');if($('#c').value)q=q.eq('category_id',$('#c').value);if($('#district').value)q=q.eq('district_id',$('#district').value);if($('#maxb').value)q=q.lte('budget_zmw',+$('#maxb').value);
+  if(['official','unofficial'].includes(S.exploreFilter))q=q.eq('classification',S.exploreFilter);if(['virtual','physical'].includes(S.exploreFilter))q=q.eq('arrangement',S.exploreFilter);
+  const {data,error}=await q.order($('#sort').value,{ascending:false}).limit(50);$('#res').innerHTML=error?`<div class="card err">${esc(error.message)}</div>`:data.length?data.map(jobCard).join(''):'<div class="card sm">No matching opportunities.</div>';};
+ $('#filters').onclick=e=>{const f=e.target.dataset.f;if(f){S.exploreFilter=f;exploreView();}};['q','c','maxb','district','sort'].forEach(id=>$('#'+id).onchange=run);$('#q').oninput=()=>{clearTimeout(window._sSearch);window._sSearch=setTimeout(run,350);};run();
+}
+function postView(){
+ const cur=S.profile.working_district_id,prov=S.dist.find(d=>d.id==cur)?.province_id;
+ app.innerHTML=`<h2>Post an opportunity</h2><div class="card">
+ <label>Job title</label><input id="t" placeholder="What needs to be done?"><label>Description</label><textarea id="d" placeholder="Describe the work and expectations"></textarea>
+ <div class="grid2"><div><label>Classification</label><select id="cl"><option value="unofficial">Unofficial / informal</option><option value="official">Official / formal job</option></select></div><div><label>Arrangement</label><select id="ar"><option value="physical">Physical</option><option value="virtual">Virtual</option></select></div></div>
+ <label>Employer / organisation name (optional)</label><input id="employer" placeholder="Company or employer name">
+ <label>Category</label><select id="c">${opts(S.cats)}</select><div class="grid2"><div><label>Budget / salary (K)</label><input id="b" type="number" min="1"></div><div><label>Opportunity type</label><select id="ty"><option value="one_time">One-time task</option><option value="recurring">Recurring</option><option value="temporary">Temporary employment</option><option value="permanent">Permanent employment</option><option value="freelance">Freelance project</option><option value="contract">Contract</option></select></div></div>
+ <div id="loc2"><label>Province and district</label><select id="p">${opts(S.prov,prov)}</select><select id="di"></select></div>
+ <div class="grid2"><div><label>Start date</label><input id="sd" type="date"></div><div><label>Completion date</label><input id="cd" type="date"></div></div><label>Application deadline</label><input id="dl" type="date">
+ <div id="officialFields" class="hidden"><h3>Official job requirements</h3><label>Documents, CV, qualifications and other requirements</label><textarea id="req" placeholder="e.g. NRC, CV, relevant qualifications, bank account details…"></textarea></div>
+ <div class="sm" style="margin:10px 0">Job-image uploads will be enabled after a storage bucket and image-path field are added to Supabase. This migration does not create those yet.</div>
+ <label><input id="ng" type="checkbox" style="width:auto"> Budget is negotiable</label><button id="go">Publish opportunity</button><div id="msg" class="err"></div></div>`;
+ const link=()=>$('#di').innerHTML=dOpts($('#p').value,cur);$('#p').onchange=link;link();
+ $('#ar').onchange=()=>$('#loc2').classList.toggle('hidden',$('#ar').value==='virtual');$('#cl').onchange=()=>$('#officialFields').classList.toggle('hidden',$('#cl').value!=='official');
+ $('#go').onclick=async()=>{if(S.busy)return;const title=$('#t').value.trim(),budget=+$('#b').value;if(title.length<5||!$('#d').value.trim()||!(budget>0)){ $('#msg').textContent='Enter a title, description and valid budget.';return;}
+  S.busy=true;$('#go').textContent='Publishing…';const virtual=$('#ar').value==='virtual';
+  const payload={poster_id:S.user.id,title,description:$('#d').value.trim(),category_id:+$('#c').value,budget_zmw:budget,negotiable:$('#ng').checked,opportunity_type:$('#ty').value,arrangement:$('#ar').value,district_id:virtual?null:+$('#di').value,classification:$('#cl').value,employer_name:$('#employer').value.trim()||null,requirements:$('#cl').value==='official'?$('#req').value.trim()||null:null,start_date:$('#sd').value||null,completion_date:$('#cd').value||null,deadline:$('#dl').value||null};
+  const {error}=await db.from('jobs').insert(payload);S.busy=false;$('#go').textContent='Publish opportunity';if(error)$('#msg').textContent=error.message;else{S.tab='home';main();}};
+}
+async function avatarUrl(path){if(!path)return null;const {data}=db.storage.from(P3.bucket).getPublicUrl(path);return data?.publicUrl||null;}
+async function meView(){
+ const p=S.profile,photo=await avatarUrl(p.avatar_url);
+ const [posted,apps,statsRes,reviewRes]=await Promise.all([
+  db.from('jobs').select(JSEL).eq('poster_id',S.user.id).is('deleted_at',null).order('created_at',{ascending:false}),
+  db.from('job_applications').select('status,jobs('+JSEL+')').eq('applicant_id',S.user.id).order('created_at',{ascending:false}),
+  db.from('profile_stats').select('avg_rating,jobs_done').eq('id',S.user.id).maybeSingle(),
+  db.from('reviews').select('id,rating,comment,created_at').eq('reviewee_id',S.user.id).order('created_at',{ascending:false})
+ ]);
+ const jobs=posted.data||[],worked=(apps.data||[]).filter(x=>x.jobs),reviews=reviewRes.data||[],stats=statsRes.data||{};
+ const avg=stats.avg_rating??0,done=stats.jobs_done??0,section=S.profileSection||'overview';
+ app.innerHTML=`<div class="card"><div class="row"><img class="avatar" id="avatar" src="${photo||''}" onerror="this.style.display='none'"><div style="flex:1"><h2 style="margin:0">${esc(p.full_name||'SHAMLOKO member')}</h2><div class="sm">@${esc(p.username||'member')} · Member since ${dateText(p.created_at?.slice(0,10))}</div><div class="sm">${esc(p.verification_status||'Unverified')} · ${Number(avg).toFixed(1)} ★ · ${done} completed jobs</div></div></div>
+ <div class="row" style="margin-top:12px"><button class="soft" id="photoUpload">Upload / change photo</button><button class="alt" id="photoRemove">Remove</button></div><input id="photoFile" type="file" accept="image/*" class="hidden"></div>
+ <div class="profiletabs">${[['overview','Overview'],['posted','Jobs Posted'],['worked','Jobs Worked On'],['earnings','Earnings'],['reviews','Reviews'],['settings','Settings']].map(([k,l])=>`<button class="${section===k?'soft':'alt'}" data-sec="${k}">${l}</button>`).join('')}</div><div id="profileContent"></div>`;
+ $('#photoUpload').onclick=()=>$('#photoFile').click();$('#photoFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;const path=`${S.user.id}/${Date.now()}-${f.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;const up=await db.storage.from(P3.bucket).upload(path,f,{upsert:true});if(up.error)return alert(up.error.message);const {error}=await db.from('profiles').update({avatar_url:path}).eq('id',S.user.id);if(error)return alert(error.message);await loadProfile();};
+ $('#photoRemove').onclick=async()=>{if(!p.avatar_url)return;const del=await db.storage.from(P3.bucket).remove([p.avatar_url]);if(del.error)return alert(del.error.message);const {error}=await db.from('profiles').update({avatar_url:null}).eq('id',S.user.id);if(error)return alert(error.message);await loadProfile();};
+ app.querySelectorAll('[data-sec]').forEach(b=>b.onclick=()=>{S.profileSection=b.dataset.sec;meView();});
+ const content=$('#profileContent');
+ if(section==='overview')content.innerHTML=`<div class="card"><h3>About</h3><p>${esc(p.bio||'Add a short introduction in Settings.')}</p><div class="sm">Skills: ${esc((p.skills||[]).join(', ')||'Not added')}</div></div><div class="card"><h3>Recent jobs posted</h3>${jobs.slice(0,3).map(jobCard).join('')||'<div class="sm">No jobs posted yet.</div>'}</div>`;
+ if(section==='posted')content.innerHTML=`<h3>Jobs you've posted</h3>${jobs.length?jobs.map(j=>jobCard(j)+`<button class="alt" data-edit="${j.id}">Edit listing · ${j.status}</button>`).join(''):'<div class="card sm">No jobs posted yet.</div>'}`;
+ if(section==='worked')content.innerHTML=`<h3>Jobs you've worked on</h3>${worked.length?worked.map(x=>jobCard({...x.jobs,_app:x.status})).join(''):'<div class="card sm">No work history found in applications.</div>'}`;
+ if(section==='earnings')content.innerHTML=`<div class="card"><h3>Earnings</h3><div class="sm">Completed-work count is taken from the profile_stats view. This migration does not expose monetary payout totals.</div><div class="big">${done}</div><div class="sm">Completed jobs</div><p>Free postings used: ${p.posts_created??0}/5<br>Free applications used: ${p.applications_made??0}/5</p></div>`;
+ if(section==='reviews')content.innerHTML=`<div class="card"><div class="big">${Number(avg).toFixed(1)} ★</div><div class="sm">${reviews.length} review records returned</div></div>${reviews.map(r=>`<div class="card"><b>${Number(r.rating||0)} ★</b><p>${esc(r.comment||'No written comment')}</p><div class="sm">${dateText(r.created_at?.slice(0,10))}</div></div>`).join('')||'<div class="card sm">No reviews yet.</div>'}`;
+ if(section==='settings')content.innerHTML=`<div class="card"><h3>Edit profile</h3><label>Full name</label><input id="pname" value="${esc(p.full_name||'')}"><label>Username</label><input id="puser" value="${esc(p.username||'')}"><label>Bio</label><textarea id="pbio">${esc(p.bio||'')}</textarea><label>Skills (comma separated)</label><input id="pskills" value="${esc((p.skills||[]).join(', '))}"><button id="saveProfile">Save profile</button><div id="pmsg" class="err"></div></div><div class="card"><div class="sm">CHANGE WORKING LOCATION</div><select id="p">${opts(S.prov,S.dist.find(d=>d.id==p.working_district_id)?.province_id)}</select><select id="di"></select><button class="alt" id="sv">Update location</button></div><button class="alt" id="out">Log out</button>`;
+ if(section==='settings'){const f=()=>$('#di').innerHTML=dOpts($('#p').value,p.working_district_id);$('#p').onchange=f;f();
+  $('#saveProfile').onclick=async()=>{const upd={full_name:$('#pname').value.trim(),username:$('#puser').value.trim()||null,bio:$('#pbio').value.trim(),skills:$('#pskills').value.split(',').map(x=>x.trim()).filter(Boolean)};const {error}=await db.from('profiles').update(upd).eq('id',S.user.id);$('#pmsg').textContent=error?error.message:'Profile updated.';if(!error)loadProfile();};
+  $('#sv').onclick=async()=>{const {error}=await db.from('profiles').update({working_district_id:+$('#di').value}).eq('id',p.id);if(error)alert(error.message);else{S.profile.working_district_id=+$('#di').value;main();}};
+  $('#out').onclick=async()=>{await db.auth.signOut();S.profile=null;boot();};}
+ content.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editJob(b.dataset.edit));
+}
+async function editJob(id){const {data:j,error}=await db.from('jobs').select('*').eq('id',id).single();if(error)return alert(error.message);
+ app.innerHTML=`<button class="alt" id="back">← Back to profile</button><div class="card"><h2>Edit opportunity</h2><label>Title</label><input id="et" value="${esc(j.title)}"><label>Description</label><textarea id="ed">${esc(j.description)}</textarea><label>Budget (K)</label><input id="eb" type="number" value="${j.budget_zmw}"><label>Classification</label><select id="ec"><option value="official">Official</option><option value="unofficial">Unofficial</option></select><label>Employer name</label><input id="eem" value="${esc(j.employer_name||'')}"><label>Requirements</label><textarea id="er">${esc(j.requirements||'')}</textarea><label>Start date</label><input id="es" type="date" value="${j.start_date||''}"><label>Completion date</label><input id="ecm" type="date" value="${j.completion_date||''}"><label>Application deadline</label><input id="edl" type="date" value="${j.deadline||''}"><button id="save">Save changes</button><div id="emsg" class="err"></div></div>`;
+ $('#ec').value=j.classification||'unofficial';$('#back').onclick=()=>{S.profileSection='posted';meView();};
+ $('#save').onclick=async()=>{const {error}=await db.from('jobs').update({title:$('#et').value.trim(),description:$('#ed').value.trim(),budget_zmw:+$('#eb').value,classification:$('#ec').value,employer_name:$('#eem').value.trim()||null,requirements:$('#er').value.trim()||null,start_date:$('#es').value||null,completion_date:$('#ecm').value||null,deadline:$('#edl').value||null}).eq('id',id).eq('poster_id',S.user.id);$('#emsg').textContent=error?error.message:'Saved.';if(!error){S.profileSection='posted';meView();}};}
+document.addEventListener('click',e=>{const c=e.target.closest('.job');if(c?.dataset.id)jobView(c.dataset.id);});
+async function jobView(id){
+ app.innerHTML='<div class="card">Loading…</div>';const {data:j,error}=await db.from('jobs').select('*,districts(name),categories(name)').eq('id',id).single();if(error)return app.innerHTML=`<div class="card err">${esc(error.message)}</div>`;
+ const mine=j.poster_id===S.user.id,open=ACTIVE.includes(j.status);let h=`<button class="alt" id="bk">← Back</button><div class="card"><div class="between"><h2>${esc(j.title)}</h2><div class="big">${K(j.budget_zmw)}</div></div><span class="tag">${j.classification==='official'?'Official':'Unofficial'}</span><span class="tag">${j.arrangement==='virtual'?'Virtual':'Physical'}</span><span class="tag">${esc(j.status)}</span><p>${esc(j.description)}</p><div class="sm">${esc(j.employer_name||'')} · ${esc(j.districts?.name||'Anywhere in Zambia')}</div><div class="sm">Start: ${dateText(j.start_date)} · Completion: ${dateText(j.completion_date)} · Deadline: ${dateText(j.deadline)}</div>${j.classification==='official'?`<hr><b>Requirements</b><p>${esc(j.requirements||'Not specified')}</p>`:''}</div>`;
+ if(mine){const {data:ap}=await db.from('job_applications').select('*,profiles(full_name)').eq('job_id',id).order('created_at');h+=`<h3>Applicants (${ap?.length||0})</h3>`+(ap||[]).map(a=>`<div class="card"><b>${esc(a.profiles?.full_name||'Applicant')}</b><span class="tag">${esc(a.status)}</span><p>${esc(a.intro)}</p>${a.status==='pending'?`<button data-acc="${a.id}">Accept</button><button class="alt" data-rej="${a.id}">Reject</button>`:''}</div>`).join('');}
+ else if(open){const {data:mineApp}=await db.from('job_applications').select('id').eq('job_id',id).eq('applicant_id',S.user.id).maybeSingle();h+=mineApp?'<div class="card sm">You have already applied.</div>':`<div class="card"><h3>Apply</h3><textarea id="intro" placeholder="Introduce yourself and your skills"></textarea><input id="tm" placeholder="Estimated completion time"><button id="apply">Send application</button><div id="msg" class="err"></div></div>`;}
+ app.innerHTML=h;$('#bk').onclick=()=>main();app.querySelectorAll('[data-acc]').forEach(b=>b.onclick=async()=>{const {error}=await db.rpc('accept_application',{app_id:b.dataset.acc});if(error)alert(error.message);else jobView(id);});app.querySelectorAll('[data-rej]').forEach(b=>b.onclick=async()=>{const {error}=await db.from('job_applications').update({status:'rejected'}).eq('id',b.dataset.rej);if(error)alert(error.message);else jobView(id);});
+ if($('#apply'))$('#apply').onclick=async()=>{if(!$('#intro').value.trim())return $('#msg').textContent='Please introduce yourself.';const {error}=await db.from('job_applications').insert({job_id:id,applicant_id:S.user.id,intro:$('#intro').value.trim(),estimated_time:$('#tm').value.trim()});if(error)$('#msg').textContent=error.message;else jobView(id);};
+}
+async function boot(){const {data:{session}}=await db.auth.getSession();const [p,d,c]=await Promise.all([db.from('provinces').select('*').order('name'),db.from('districts').select('*').order('name'),db.from('categories').select('*').eq('active',true).order('name')]);S.prov=p.data||[];S.dist=d.data||[];S.cats=c.data||[];if(!session)return authView();S.user=session.user;await loadProfile();}
+db.auth.onAuthStateChange((_event,session)=>{if(!session){S.user=null;S.profile=null;authView();}});
+boot();
+
+})();
+</script>
+
+</body></html>
