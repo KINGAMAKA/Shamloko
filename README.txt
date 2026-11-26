@@ -1,27 +1,30 @@
-SHAMLOKO PHASE 2 UPDATE PACKAGE
+SHAMLOKO — SOCIAL PROFILE PHOTO UPDATE
 
 FILES
-1. SHAMLOKO-index-payments.html - updated main website file.
-2. SHAMLOKO-admin-payments.html - updated admin dashboard file.
-3. SHAMLOKO-phase2-upgrade.sql - database migration for the new membership limits, payment approval flow, applicant counts and messaging rules.
+- index.html: Updated main SHAMLOKO application.
+- admin.html: Current SHAMLOKO admin dashboard with revenue overview, included unchanged.
 
-CONFIRMED MEMBERSHIP SETTINGS
-- Single application: K1.00 per job.
-- Light: K9.00 for 30 days, up to 20 applications.
-- Pro: K19.99 for 30 days, unlimited applications.
+WHAT CHANGED IN THE MAIN APP
+1. Job feed cards show the job poster's circular profile photo beside their name.
+2. The job detail page shows the poster's profile photo and name above the job information.
+3. Job comments and replies show each commenter's profile photo.
+4. Inbox conversation previews show the other member's profile photo.
+5. The conversation header and every message bubble show the sender's profile photo.
+6. Applicant rows also show applicants' profile photos.
+7. If a member has not uploaded a photo, SHAMLOKO shows a circular initial avatar instead.
 
-INSTALLATION ORDER
-1. Back up the current website files and Supabase database.
-2. Confirm that the earlier SHAMLOKO-payments-setup.sql migration has already been run. If it has not, run that migration first.
-3. Run SHAMLOKO-phase2-upgrade.sql in Supabase SQL Editor.
-4. Replace the currently hosted main website HTML with SHAMLOKO-index-payments.html.
-5. Replace the currently hosted admin HTML with SHAMLOKO-admin-payments.html.
-6. Sign in as a normal applicant and test the K1 request flow. Approve a test transaction in Admin; return to the job and complete the application.
-7. Test Light with 20 applications and verify that the 21st is blocked; test Pro and verify applications remain unlimited during the 30-day membership.
-8. Test messaging: the poster should start a conversation from the job's applicant list; the applicant should only be able to reply after that first poster message.
+INSTALLATION
+1. Make a backup of the currently deployed index.html.
+2. Replace the deployed main index.html with this package's index.html.
+3. Keep admin.html as your admin page (this copy retains the current revenue dashboard).
+4. Publish/deploy the updated files and refresh the site.
 
-IMPORTANT
-- These are updated source files and a database migration; they have not been deployed to your hosting or run against your live Supabase project from this chat.
-- The SQL assumes the existing SHAMLOKO tables/columns and admin RPCs described in the earlier payment setup: jobs, profiles, job_applications, subscriptions, application_payment_requests, messages, platform_settings and admin_stats().
-- The existing admin_review_sub RPC must continue to create a subscriptions row with plan='lite' or plan='pro' and expires_at 30 days after approval. The migration intentionally does not replace your existing membership approval routine.
-- Test in a backup/staging environment before applying to live data.
+DATABASE REQUIREMENTS
+- No SQL migration is required for this visual update.
+- The existing profiles.photo_url field and avatars storage bucket are reused.
+- Members' existing profile photos are displayed automatically; no one needs to upload again.
+- New photos will appear wherever the member is shown after the profile photo is saved.
+
+VALIDATION
+- The updated JavaScript passed a syntax check.
+- Existing authentication, jobs, applications, comments, messaging and admin flows were retained.
