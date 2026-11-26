@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SHAMLOKO</title>
+<style>:root{--bg:#f5f6f8;--card:#fff;--g:#0a7d54;--gl:#e6f4ee;--t:#1c2430;--m:#6b7685;--bd:#e3e7ec}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:14px system-ui,sans-serif;padding:52px 0 56px}
+header{position:fixed;top:0;left:0;right:0;height:52px;background:#fff;border-bottom:1px solid var(--bd);padding:0 14px;display:flex;justify-content:space-between;align-items:center;font-weight:800;letter-spacing:2px;z-index:5}
+header b{color:var(--g)}header div{display:flex;gap:8px;align-items:center;letter-spacing:0}#loc{cursor:pointer}
+main{padding:0 14px 14px;max-width:640px;margin:auto}h1{font-size:21px;margin:14px 0 8px}h3{margin:10px 0 6px;font-size:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin:8px 0;box-shadow:0 1px 2px #0001}
+.big{font-size:24px;font-weight:800;color:var(--g)}.sm{color:var(--m);font-size:12px}
+input,select,textarea,button{width:100%;padding:10px;margin:4px 0;border-radius:8px;border:1px solid var(--bd);background:#fff;color:var(--t);font:inherit}
+button{background:var(--g);border:0;color:#fff;font-weight:700}button.alt{background:#fff;border:1px solid var(--g);color:var(--g)}
+nav{position:fixed;bottom:0;left:0;right:0;height:56px;display:flex;background:#fff;border-top:1px solid var(--bd);z-index:5}
+nav button{background:none;border-radius:0;margin:0;color:var(--m);font-size:12px}nav button.on{color:var(--g)}nav button.post{background:var(--g);color:#fff}
+.tag{display:inline-block;background:var(--gl);color:var(--g);border-radius:6px;padding:2px 7px;font-size:11px;margin:0 5px 3px 0}.err{color:#c0392b}
+.sep{height:1px;background:var(--bd);margin:14px 0}.band{background:var(--g);color:#fff;font-weight:700;padding:9px 12px;border-radius:8px;margin:14px 0 4px}
+.row{display:flex;gap:8px}.row>*{flex:1}.chips{display:flex;gap:6px;overflow-x:auto;white-space:nowrap;padding:2px 0}
+.chip{width:auto;flex:none;padding:6px 11px;margin:0;border-radius:16px;background:#fff;color:var(--t);border:1px solid var(--bd);font-weight:500;font-size:12px}.chip.on{background:var(--g);color:#fff;border-color:var(--g)}
+.acts{display:flex;gap:6px;margin-top:6px}.acts button{padding:6px;font-size:12px;background:#fff;color:var(--t);border:1px solid var(--bd);font-weight:600}.acts button.a{background:var(--g);color:#fff;border-color:var(--g)}
+.xc{position:sticky;top:52px;background:var(--bg);padding:6px 0;z-index:3}.xc input,.xc select{padding:7px;font-size:13px;margin:3px 0}
+.scroll{height:calc(100vh - 235px);overflow-y:auto}.st .big{font-size:19px}
+.av{width:72px;height:72px;border-radius:50%;object-fit:cover;background:var(--gl);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--g);font-weight:700}
+.unread{border-left:3px solid var(--g)}.ml{height:50vh;overflow-y:auto;padding:4px}.m{background:#eef1f4;border-radius:10px;padding:7px 10px;margin:4px 40px 4px 0;word-break:break-word}.m.me{background:var(--gl);margin:4px 0 4px 40px}
+#bc{background:#c0392b;color:#fff;border-radius:9px;font-size:10px;padding:1px 5px;font-style:normal}.bell{width:auto;padding:4px 8px;margin:0;background:#fff;color:var(--t);border:1px solid var(--bd)}
+</style></head><body>
+<header><span>SHAM<b>LOKO</b></span><div><span id="loc" class="sm"></span><button id="bell" class="bell" hidden>🔔 <i id="bc" hidden></i></button></div></header>
+<main id="app">Loading…</main>
+<nav id="nav" hidden></nav>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL='https://arfsggndgyezukwuvmad.supabase.co', SUPABASE_ANON_KEY='sb_publishable_Wso8pBQlyjISd5Qqv-FqyQ_J0fQSHor'; // anon key only, never the service key
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const $=s=>document.querySelector(s), app=$('#app');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const K=n=>'K'+Number(n||0).toLocaleString('en-US');
+const S={user:null,profile:null,prov:[],dist:[],cats:[],tab:'home',busy:false};
+const opts=(a,sel)=>a.map(x=>`<option value="${x.id}" ${x.id==sel?'selected':''}>${esc(x.name)}</option>`).join('');
+const dOpts=(pid,sel)=>opts(S.dist.filter(d=>d.province_id==pid),sel);
+
+async function boot(){
+  const {data:{session}}=await db.auth.getSession();
+  const [p,d,c]=await Promise.all([db.from('provinces').select('*').order('name'),db.from('districts').select('*').order('name'),db.from('categories').select('*').eq('active',true).order('name')]);
+  S.prov=p.data||[];S.dist=d.data||[];S.cats=c.data||[];
+  if(!session) return authView();
+  S.user=session.user; await loadProfile();
+}
+async function loadProfile(){
+  const {data}=await db.from('profiles').select('*').eq('id',S.user.id).maybeSingle();
+  S.profile=data; if(data)await loadSaved(); data?main():setupView();
+}
+function authView(){
+  $('#nav').hidden=true;
+  app.innerHTML=`<div class="card"><h2>One person's problem is another person's opportunity</h2>
+  <input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password (6+ characters)">
+  <button id="in">Log in</button><button class="alt" id="up">Create account</button><div id="msg" class="err"></div></div>`;
+  const go=async fn=>{const {error}=await fn({email:$('#em').value.trim(),password:$('#pw').value});
+    if(error)$('#msg').textContent=error.message;else boot();};
+  $('#in').onclick=()=>go(db.auth.signInWithPassword.bind(db.auth));
+  $('#up').onclick=()=>go(db.auth.signUp.bind(db.auth));
+}
+function setupView(){
+  $('#nav').hidden=true;
+  app.innerHTML=`<div class="card"><h3>Your profile</h3>
+  <input id="fn" placeholder="Full name"><input id="ph" placeholder="Phone (e.g. 097...)">
+  <textarea id="bio" placeholder="Short bio"></textarea><input id="sk" placeholder="Skills, comma separated">
+  <div class="sm">HOME LOCATION</div><select id="hp">${opts(S.prov)}</select><select id="hd"></select>
+  <div class="sm">WORKING LOCATION (you can change it later)</div><select id="wp">${opts(S.prov)}</select><select id="wd"></select>
+  <button id="sv">Save and continue</button><div id="msg" class="err"></div></div>`;
+  const link=(p,d)=>{const f=()=>$(d).innerHTML=dOpts($(p).value);$(p).onchange=f;f();};
+  link('#hp','#hd');link('#wp','#wd');
+  $('#sv').onclick=async()=>{
+    const name=$('#fn').value.trim(); if(!name) return $('#msg').textContent='Enter your full name';
+    const {error}=await db.from('profiles').insert({id:S.user.id,full_name:name,phone:$('#ph').value.trim(),email:S.user.email,bio:$('#bio').value.trim(),
+      skills:$('#sk').value.split(',').map(s=>s.trim()).filter(Boolean),home_district_id:+$('#hd').value,working_district_id:+$('#wd').value});
+    error?$('#msg').textContent=error.message:loadProfile();};
+}
+
+const ACTIVE=['published','applications_open'];
+const JSEL='id,title,budget_zmw,arrangement,classification,status,created_at,deadline,districts(name),categories(name),profiles!poster_id(full_name,verification_status),job_comments(count),applicant_count';
+const ICON={'Errands':'🛍️','Delivery':'📦','Transport':'🚚','Cleaning':'🧹','Electrical':'💡','Plumbing':'🔧','Construction':'🏗️','Agriculture':'🌾','IT':'💻','Graphic design':'🎨','Digital marketing':'📣','Writing':'✍️','Education':'📚','General labour':'💪','Formal employment':'🏢'};
+S.saved=new Set();S.f={q:'',cls:'',arr:'',cat:'',sort:'created_at'};
+async function loadSaved(){const {data}=await db.from('saved_jobs').select('job_id').eq('user_id',S.user.id);S.saved=new Set((data||[]).map(x=>x.job_id));}
+function main(){
+  const n=$('#nav');n.hidden=false;
+  n.innerHTML=[['home','Home'],['explore','Explore'],['post','Post a Job'],['profile','Profile']].map(([k,l])=>`<button data-t="${k}" class="${k==S.tab?'on':''} ${k=='post'?'post':''}">${l}</button>`).join('');
+  n.onclick=e=>{const t=e.target.dataset.t;if(t){S.tab=t;main();}};
+  const dn=S.dist.find(d=>d.id==S.profile.working_district_id);
+  $('#loc').textContent=dn?'📍 '+dn.name:'';$('#loc').onclick=()=>{S.tab='profile';S.pt='Settings';main();};
+  $('#bell').hidden=false;$('#bell').onclick=()=>{S.tab='notif';main();};watch();
+  ({home:homeView,explore:exploreView,post:postView,profile:profileView,notif:notifView})[S.tab]();
+}
+function watch(){if(S.ch)return;refreshBell();S.ch=db.channel('n'+S.user.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:'user_id=eq.'+S.user.id},refreshBell).subscribe();}
+async function refreshBell(){const {count}=await db.from('notifications').select('id',{count:'exact',head:true}).eq('user_id',S.user.id).eq('read',false);const b=$('#bc');b.textContent=count||'';b.hidden=!count;}
+const jobCard=j=>{const n=j.job_comments?.[0]?.count||0,sv=S.saved.has(j.id);
+ return `<div class="card"><div class="job" data-id="${j.id}"><b>${esc(j.title)}</b><div class="big" style="font-size:19px">${K(j.budget_zmw)}</div>
+ <span class="tag">${j.classification=='official'?'Official':'Unofficial'}</span><span class="tag">${j.arrangement=='virtual'?'Virtual':'Physical'}</span><span class="tag">${esc(j.categories?.name||'Other')}</span><span class="tag">👥 ${j.applicant_count||0}</span>${j._tag?'<span class="tag">'+esc(j._tag)+'</span>':''}${j.status&&!ACTIVE.includes(j.status)?'<span class="tag">'+esc(j.status)+'</span>':''}
+ <div class="sm">📍 ${esc(j.districts?.name||'Anywhere in Zambia')} · by ${esc(j.profiles?.full_name||'')}${j.profiles?.verification_status=='verified'?' ✓':''} · ${new Date(j.created_at).toLocaleDateString()}${j.deadline?' · Apply by '+new Date(j.deadline).toLocaleDateString():''}</div></div>
+ <div class="acts"><button class="a" data-act="apply" data-id="${j.id}">Apply</button><button data-act="comment" data-id="${j.id}">💬 ${n}</button><button data-act="share" data-id="${j.id}">Share</button><button data-act="save" data-id="${j.id}">${sv?'★ Saved':'☆ Save'}</button></div></div>`;};
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]');if(!b)return;const id=b.dataset.id,a=b.dataset.act;
+ if(a=='apply')jobView(id);
+ if(a=='comment'){await jobView(id);$('#cm')?.scrollIntoView();}
+ if(a=='share'){const url=location.origin+location.pathname+'#job='+id;if(navigator.share)navigator.share({title:'SHAMLOKO opportunity',url}).catch(()=>{});else navigator.clipboard?.writeText(url).then(()=>alert('Link copied'));}
+ if(a=='save'){const on=S.saved.has(id);const {error}=on?await db.from('saved_jobs').delete().eq('user_id',S.user.id).eq('job_id',id):await db.from('saved_jobs').insert({user_id:S.user.id,job_id:id});
+  if(error)return alert(error.message);on?S.saved.delete(id):S.saved.add(id);b.textContent=on?'☆ Save':'★ Saved';}});
+async function homeView(){
+  app.innerHTML='<div class="card">Loading…</div>';db.rpc('expire_jobs');
+  const wd=S.profile.working_district_id,base=()=>db.from('jobs').select(JSEL).in('status',ACTIVE).is('deleted_at',null);
+  const [nat,loc,latest,near,top]=await Promise.all([db.from('opportunity_value_national').select('*').single(),db.from('opportunity_value_by_district').select('*').eq('district_id',wd).maybeSingle(),
+    base().order('created_at',{ascending:false}).limit(8),base().eq('district_id',wd).order('created_at',{ascending:false}).limit(5),base().order('budget_zmw',{ascending:false}).limit(5)]);
+  const er=nat.error||latest.error;if(er)return app.innerHTML=`<div class="card err">Network or setup error: ${esc(er.message)}</div>`;
+  const dn=S.dist.find(d=>d.id==wd)?.name||'Your area';
+  const sec=(t,d,e)=>`<div class="sep"></div><h3>${t}</h3>`+(d.length?d.map(jobCard).join(''):`<div class="card sm">${e}</div>`);
+  app.innerHTML=`<h1>Find opportunities. Make things happen.</h1><input id="q" placeholder="Search jobs, skills, services" enterkeyhint="search">
+  <div class="row"><button id="fw">Find Work</button><button class="alt" id="pw">Post Work</button></div><div class="sep"></div>
+  <div class="row"><div class="card st"><div class="sm">ZAMBIA ACTIVE</div><div class="big">${K(nat.data.active_value)}</div><div class="sm">${nat.data.active_jobs} jobs · ${K(nat.data.posted_today)} today</div></div>
+  <div class="card st"><div class="sm">${esc(dn.toUpperCase())} ACTIVE</div><div class="big">${K(loc.data?.active_value)}</div><div class="sm">${K(loc.data?.posted_today)} today</div></div></div><div class="sep"></div>
+  <div class="chips">${S.cats.filter(c=>ICON[c.name]).map(c=>`<button class="chip" data-cat="${c.id}">${ICON[c.name]} ${esc(c.name)}</button>`).join('')}</div>
+  <div class="band">Explore opportunities</div><h3>Latest opportunities</h3>${latest.data.length?latest.data.map(jobCard).join(''):'<div class="card sm">No opportunities yet. Be the first to post one.</div>'}
+  ${sec('Near you',near.data,'No opportunities in your area yet.')}${sec('Highest paying',top.data,'Nothing posted yet.')}`;
+  $('#q').onkeydown=e=>{if(e.key=='Enter'){S.f={...S.f,q:$('#q').value.trim(),cls:'',arr:'',cat:''};S.tab='explore';main();}};
+  $('#fw').onclick=()=>{S.tab='explore';main();};$('#pw').onclick=()=>{S.tab='post';main();};
+  app.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{S.f={...S.f,cat:b.dataset.cat};S.tab='explore';main();});
+}
+async function exploreView(){
+  const f=S.f,ch=(k,v,l)=>`<button class="chip ${f[k]==v?'on':''}" data-k="${k}" data-v="${v}">${l}</button>`;
+  app.innerHTML=`<div class="xc"><input id="q" value="${esc(f.q)}" placeholder="Search jobs, skills, services"><div class="chips">${ch('cls','','All')}${ch('cls','official','Official')}${ch('cls','unofficial','Unofficial')}${ch('arr','virtual','Virtual')}${ch('arr','physical','Physical')}</div>
+  <div class="row"><select id="c"><option value="">All categories</option>${opts(S.cats,f.cat)}</select><select id="o"><option value="created_at">Newest</option><option value="budget_zmw" ${f.sort=='budget_zmw'?'selected':''}>Highest paying</option></select></div></div><div id="res" class="scroll"><div class="card sm">Loading…</div></div>`;
+  app.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{const k=b.dataset.k;S.f[k]=S.f[k]==b.dataset.v?'':b.dataset.v;exploreView();});
+  $('#q').onchange=()=>{S.f.q=$('#q').value.trim();exploreView();};$('#c').onchange=()=>{S.f.cat=$('#c').value;exploreView();};$('#o').onchange=()=>{S.f.sort=$('#o').value;exploreView();};
+  let q=db.from('jobs').select(JSEL).in('status',ACTIVE).is('deleted_at',null);const t=f.q.replace(/[%,()]/g,'');
+  if(t)q=q.or(`title.ilike.%${t}%,description.ilike.%${t}%`);if(f.cls)q=q.eq('classification',f.cls);if(f.arr)q=q.eq('arrangement',f.arr);if(f.cat)q=q.eq('category_id',f.cat);
+  const {data,error}=await q.order(f.sort,{ascending:false}).limit(40);
+  $('#res').innerHTML=error?`<div class="card err">${esc(error.message)}</div>`:data.length?data.map(jobCard).join(''):'<div class="card sm">No matching opportunities.</div>';
+}
+function postView(){
+  app.innerHTML=`<div class="card"><h3>Post a job or problem</h3>
+  <select id="cl"><option value="unofficial">Unofficial job (casual, errands, trades)</option><option value="official">Official job (formal employment)</option></select><input id="t" placeholder="Title"><textarea id="d" placeholder="Describe what needs doing"></textarea>
+  <textarea id="rq" placeholder="Requirements (official jobs: documents, CV, qualifications)"></textarea><select id="c">${opts(S.cats)}</select><input id="b" type="number" min="1" placeholder="Budget (ZMW)">
+  <select id="ty"><option value="one_time">One-time task</option><option value="recurring">Recurring</option><option value="temporary">Temporary employment</option><option value="permanent">Permanent employment</option><option value="freelance">Freelance project</option><option value="contract">Contract</option></select>
+  <select id="ar"><option value="physical">Physical (someone must travel)</option><option value="virtual">Virtual (remote)</option></select>
+  <div id="loc2"><select id="p">${opts(S.prov,S.dist.find(d=>d.id==S.profile.working_district_id)?.province_id)}</select><select id="di"></select></div>
+  <label class="sm"><input id="ng" type="checkbox" style="width:auto"> Negotiable</label>
+  <button id="go">Publish</button><div id="msg" class="err"></div></div>`;
+  const cur=S.profile.working_district_id;
+  const f=()=>{$('#di').innerHTML=dOpts($('#p').value,cur);};$('#p').onchange=f;f();
+  $('#ar').onchange=()=>$('#loc2').hidden=$('#ar').value=='virtual';
+  $('#go').onclick=async()=>{
+    if(S.busy)return;const t=$('#t').value.trim(),b=+$('#b').value;
+    if(t.length<5||!$('#d').value.trim()||!(b>0))return $('#msg').textContent='Add a title (5+ characters), description and budget.';
+    S.busy=true;$('#go').textContent='Publishing…';
+    const v=$('#ar').value=='virtual';
+    const {error}=await db.from('jobs').insert({poster_id:S.user.id,classification:$('#cl').value,requirements:$('#rq').value.trim()||null,title:t,description:$('#d').value.trim(),category_id:+$('#c').value,budget_zmw:b,
+      negotiable:$('#ng').checked,opportunity_type:$('#ty').value,arrangement:$('#ar').value,district_id:v?null:+$('#di').value});
+    S.busy=false;$('#go').textContent='Publish';
+    if(error)gateMsg('#msg',error);else{await refreshMe();S.tab='home';main();}};
+}
+
+async function notifView(){
+  app.innerHTML='<h3>Notifications</h3><div class="card sm">Loading…</div>';
+  const {data,error}=await db.from('notifications').select('*').eq('user_id',S.user.id).order('created_at',{ascending:false}).limit(30);
+  if(error)return app.innerHTML=`<div class="card err">${esc(error.message)}</div>`;
+  app.innerHTML='<h3>Notifications</h3>'+(data.length?data.map(n=>`<div class="card ${n.read?'':'unread'}" ${n.job_id?`data-job="${n.job_id}"`:''}>${esc(n.body)}<div class="sm">${new Date(n.created_at).toLocaleString()}</div></div>`).join(''):'<div class="card sm">No notifications yet.</div>');
+  await db.from('notifications').update({read:true}).eq('user_id',S.user.id).eq('read',false);refreshBell();
+}
+document.addEventListener('click',e=>{const c=e.target.closest('[data-job]');if(c)jobView(c.dataset.job);});
+async function chat(jobId,other){
+  const {data:o}=await db.from('profiles').select('full_name').eq('id',other).single();
+  app.innerHTML=`<button class="alt" id="bk">← Back</button><div class="card"><b>${esc(o?.full_name||'User')}</b><div id="ml" class="ml"></div><div class="row"><input id="mb" placeholder="Type a message"><button id="ms" style="max-width:80px">Send</button></div></div>`;
+  const draw=m=>{const d=document.createElement('div');d.className='m '+(m.sender_id==S.user.id?'me':'');d.textContent=m.body;$('#ml').appendChild(d);$('#ml').scrollTop=1e9;};
+  const u=S.user.id,{data}=await db.from('messages').select('*').eq('job_id',jobId).or(`and(sender_id.eq.${u},recipient_id.eq.${other}),and(sender_id.eq.${other},recipient_id.eq.${u})`).order('created_at');(data||[]).forEach(draw);
+  const ch=db.channel('m'+jobId+u).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'job_id=eq.'+jobId},p=>{const m=p.new;if(m.sender_id==other&&m.recipient_id==u)draw(m);}).subscribe();
+  $('#bk').onclick=()=>{db.removeChannel(ch);jobView(jobId);};
+  $('#ms').onclick=async()=>{const t=$('#mb').value.trim();if(!t||S.busy)return;S.busy=true;const {error}=await db.from('messages').insert({job_id:jobId,sender_id:u,recipient_id:other,body:t});S.busy=false;if(error)return alert(error.message);draw({sender_id:u,body:t});$('#mb').value='';};
+}
+async function extras(j,mine){
+  const {data:cm}=await db.from('job_comments').select('body,created_at,profiles!user_id(full_name)').eq('job_id',j.id).order('created_at').limit(50),c=cm||[];
+  return (mine?'':`<button class="alt" data-msg="${j.poster_id}">Message poster</button>`)+`<div class="sep"></div><h3 id="cm">Comments (${c.length})</h3>`+(c.map(x=>`<div class="card"><b>${esc(x.profiles?.full_name)}</b> <span class="sm">${new Date(x.created_at).toLocaleDateString()}</span><p>${esc(x.body)}</p></div>`).join('')||'<div class="card sm">No comments yet.</div>')+'<input id="ci" maxlength="500" placeholder="Write a comment"><button id="cs">Post comment</button>';
+}
+function bindExtras(j){
+  if($('#apf')){const t=document.createElement('button');t.textContent='Apply for this job ↓';t.style.cssText='position:sticky;top:58px;z-index:2';t.onclick=()=>$('#apf').scrollIntoView({behavior:'smooth'});$('#bk').after(t);refreshMe().then(()=>{const q=$('#quota');if(q){const l=Math.max(0,FREE-S.profile.applications_made);q.textContent=l?'Free applications left: '+l+' of '+FREE:'Free applications used. You need a plan to apply.';}});}
+  app.querySelectorAll('[data-msg]').forEach(b=>b.onclick=()=>chat(j.id,b.dataset.msg));
+  $('#cs').onclick=async()=>{const t=$('#ci').value.trim();if(!t||S.busy)return;S.busy=true;const {error}=await db.from('job_comments').insert({job_id:j.id,user_id:S.user.id,body:t});S.busy=false;error?alert(error.message):jobView(j.id);};
+}
+const jl=(q,f)=>q.then(r=>(r.data||[]).map(f).filter(Boolean));
+async function profileView(){
+  const p=S.profile,pt=S.pt||'Overview',tabs=['Overview','Posted','Worked','Saved','Payments','Plans','Qualifications','Settings'];
+  app.innerHTML=`<div class="chips">${tabs.map(t=>`<button class="chip ${t==pt?'on':''}" data-pt="${t}">${t}</button>`).join('')}</div><div id="pb"><div class="card sm">Loading…</div></div>`;
+  app.querySelectorAll('[data-pt]').forEach(b=>b.onclick=()=>{S.pt=b.dataset.pt;profileView();});
+  const pb=$('#pb'),list=(a,e)=>pb.innerHTML=a.length?a.join(''):`<div class="card sm">${e}</div>`;
+  if(pt=='Overview'){
+    const [st,tx,ac,sub]=await Promise.all([db.from('profile_stats').select('*').eq('id',p.id).maybeSingle(),db.from('job_transactions').select('net_zmw,status').eq('payee_id',p.id),
+      db.from('job_applications').select('id',{count:'exact',head:true}).eq('applicant_id',p.id),db.from('subscriptions').select('expires_at').eq('user_id',p.id).gt('expires_at',new Date().toISOString()).limit(1)]);
+    const sum=x=>(tx.data||[]).filter(t=>t.status==x).reduce((a,t)=>a+Number(t.net_zmw),0);
+    pb.innerHTML=`<div class="card"><div class="row" style="align-items:center">${p.photo_url?`<img class="av" src="${esc(p.photo_url)}" alt="">`:`<div class="av">${esc(p.full_name[0])}</div>`}<div style="flex:3"><b>${esc(p.full_name)}</b><div class="sm">${p.username?'@'+esc(p.username)+' · ':''}${esc(p.verification_status)} · Member since ${new Date(p.created_at).toLocaleDateString()}</div><div class="sm">⭐ ${st.data?.avg_rating??'No ratings yet'} · ${st.data?.jobs_done||0} jobs completed</div></div></div>
+    <p>${esc(p.bio||'')}</p><div>${(p.skills||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join('')}</div>
+    <input id="pf" type="file" accept="image/*" hidden><div class="row"><button class="alt" id="up">${p.photo_url?'Change photo':'Add photo'}</button>${p.photo_url?'<button class="alt" id="rm">Remove photo</button>':''}</div></div>
+    <div class="row"><div class="card st"><div class="sm">CONFIRMED EARNINGS</div><div class="big">${K(sum('confirmed'))}</div></div><div class="card st"><div class="sm">PENDING</div><div class="big">${K(sum('pending')+sum('paid'))}</div></div></div>
+    <div class="card sm">Applications sent: ${ac.count||0} · Free posts used: ${p.posts_created}/5 · Free applications used: ${p.applications_made}/5 · Subscription: ${sub.data?.length?'Active until '+new Date(sub.data[0].expires_at).toLocaleDateString():'None'}</div>`;
+    $('#up').onclick=()=>$('#pf').click();
+    $('#pf').onchange=async e=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith('image/')||f.size>2e6)return alert('Choose an image under 2 MB');
+      const path=p.id+'/avatar',{error}=await db.storage.from('avatars').upload(path,f,{upsert:true,contentType:f.type});if(error)return alert(error.message);
+      const url=db.storage.from('avatars').getPublicUrl(path).data.publicUrl+'?t='+Date.now();await db.from('profiles').update({photo_url:url}).eq('id',p.id);p.photo_url=url;profileView();};
+    if($('#rm'))$('#rm').onclick=async()=>{await db.storage.from('avatars').remove([p.id+'/avatar']);await db.from('profiles').update({photo_url:null}).eq('id',p.id);p.photo_url=null;profileView();};
+  }else if(pt=='Posted')list(await jl(db.from('jobs').select(JSEL).eq('poster_id',p.id).is('deleted_at',null).order('created_at',{ascending:false}),j=>jobCard(j)),'You have not posted any jobs yet.');
+  else if(pt=='Worked')list(await jl(db.from('job_assignments').select('completed_at,jobs('+JSEL+')').eq('solver_id',p.id),a=>a.jobs&&jobCard({...a.jobs,_tag:a.completed_at?'Completed':'In progress'})),'No assigned work yet. Apply for jobs to get started.');
+  else if(pt=='Saved')list(await jl(db.from('saved_jobs').select('jobs('+JSEL+')').eq('user_id',p.id),a=>a.jobs&&jobCard(a.jobs)),'Nothing saved yet. Tap Save on any opportunity.');
+  else if(pt=='Payments'){
+    const {data}=await db.from('job_transactions').select('*,jobs(title)').or(`payer_id.eq.${p.id},payee_id.eq.${p.id}`).order('created_at',{ascending:false}).limit(30);
+    pb.innerHTML='<div class="card sm">Job payments are settled directly between poster and worker (cash or mobile money). SHAMLOKO does not hold, guarantee or protect these payments. The worker confirms once paid.</div>'+((data||[]).map(t=>{const py=t.payer_id==p.id;return `<div class="card"><b>${esc(t.jobs?.title)}</b><div class="big" style="font-size:19px">${K(t.net_zmw)}</div><span class="tag">${py?'You pay':'You earn'}</span><span class="tag">${esc(t.status)}</span>${py&&t.status=='pending'?`<button data-tx="${t.id}" data-ac="paid">I have paid</button>`:''}${!py&&['pending','paid'].includes(t.status)?`<button data-tx="${t.id}" data-ac="confirm">Confirm I received payment</button>`:''}</div>`;}).join('')||'<div class="card sm">No payments yet. They appear when a job is completed.</div>');
+    pb.querySelectorAll('[data-tx]').forEach(b=>b.onclick=async()=>{const {error}=await db.rpc('update_payment',{p_tx:b.dataset.tx,p_action:b.dataset.ac});error?alert(error.message):profileView();});
+  }else if(pt=='Plans'){
+    const [st,sub,tx]=await Promise.all([db.from('platform_settings').select('key,value').in('key',['plans','payment_mode']),db.from('subscriptions').select('*').eq('user_id',p.id).gt('expires_at',new Date().toISOString()).order('expires_at',{ascending:false}),
+      db.from('subscription_transactions').select('*').eq('user_id',p.id).order('created_at',{ascending:false}).limit(10)]);
+    const cfg=Object.fromEntries((st.data||[]).map(r=>[r.key,r.value])),sim=cfg.payment_mode=='simulator';
+    pb.innerHTML=`<div class="card"><b>Your allowance</b><div class="sm">Free: ${Math.max(0,FREE-p.posts_created)} of ${FREE} job posts and ${Math.max(0,FREE-p.applications_made)} of ${FREE} applications left.</div>`+(sub.data||[]).map(x=>`<div class="sm">Active plan: ${esc(x.plan||'')} until ${new Date(x.expires_at).toLocaleDateString()} · ${x.tasks_limit?(x.tasks_limit-x.tasks_used)+' tasks left':'unlimited'}</div>`).join('')+`</div>`
+    +(cfg.plans||[]).map(pn=>`<div class="card"><b>${esc(pn.name)}</b><div class="big">${K(pn.price_zmw)}</div><div class="sm">${pn.tasks?'Up to '+pn.tasks+' tasks (posts or applications)':'Unlimited tasks'} · ${pn.days} days</div>${sim?`<button data-pl="${esc(pn.id)}">Buy ${esc(pn.name)} (test mode)</button>`:'<div class="sm">Online payment opens soon.</div>'}</div>`).join('')
+    +(sim?'<div class="card sm">⚠ TEST MODE: no real money is charged. MTN, Airtel and Zamtel mobile money are not connected yet.</div>':'')
+    +((tx.data||[]).length?'<h3>Subscription history</h3>'+tx.data.map(t=>`<div class="card sm">${new Date(t.created_at).toLocaleDateString()} · ${esc(t.plan)} · ${K(t.amount_zmw)} · ${esc(t.status)}</div>`).join(''):'');
+    pb.querySelectorAll('[data-pl]').forEach(b=>b.onclick=async()=>{if(!confirm('TEST MODE: this activates the plan without charging real money. Continue?'))return;const {error}=await db.rpc('buy_subscription',{p_plan:b.dataset.pl});error?alert(error.message):(await refreshMe(),profileView());});
+  }else if(pt=='Qualifications'){
+    const {data}=await db.from('qualifications').select('*').eq('user_id',p.id).order('created_at',{ascending:false});
+    pb.innerHTML=`<div class="card"><b>Add a qualification</b><input id="qt" placeholder="Title (e.g. Diploma in Electrical Engineering)"><input id="qi" placeholder="Institution (optional)"><input id="qf" type="file" accept="image/*,application/pdf"><button id="qs">Upload</button><div class="sm">Private: only you can open these files. They are not verified yet.</div></div>`+((data||[]).map(q=>`<div class="card"><b>${esc(q.title)}</b><div class="sm">${esc(q.institution||'')} · ${esc(q.status)}</div><div class="row"><button class="alt" data-v="${q.file_path}">View</button><button class="alt" data-d="${q.id}" data-p="${q.file_path}">Delete</button></div></div>`).join('')||'<div class="card sm">No qualifications uploaded yet.</div>');
+    $('#qs').onclick=async()=>{const f=$('#qf').files[0],t=$('#qt').value.trim();if(!t||!f)return alert('Add a title and choose a file');if(f.size>5e6)return alert('File must be under 5 MB');
+      const path=p.id+'/'+Date.now()+'_'+f.name.replace(/[^\w.-]/g,'_'),{error}=await db.storage.from('qualifications').upload(path,f,{contentType:f.type});if(error)return alert(error.message);
+      const r=await db.from('qualifications').insert({user_id:p.id,title:t,institution:$('#qi').value.trim()||null,file_path:path});r.error?alert(r.error.message):profileView();};
+    pb.querySelectorAll('[data-v]').forEach(b=>b.onclick=async()=>{const {data:u}=await db.storage.from('qualifications').createSignedUrl(b.dataset.v,60);u&&window.open(u.signedUrl,'_blank');});
+    pb.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this file?'))return;await db.storage.from('qualifications').remove([b.dataset.p]);await db.from('qualifications').delete().eq('id',b.dataset.d);profileView();});
+  }else{
+    const cur=S.dist.find(d=>d.id==p.working_district_id);
+    pb.innerHTML=`<div class="card"><b>Edit profile</b><input id="fn" value="${esc(p.full_name)}" placeholder="Full name"><input id="un" value="${esc(p.username||'')}" placeholder="Username (letters, numbers, _)"><input id="ph" value="${esc(p.phone||'')}" placeholder="Phone"><textarea id="bio" placeholder="Short bio">${esc(p.bio||'')}</textarea><input id="sk" value="${esc((p.skills||[]).join(', '))}" placeholder="Skills, comma separated">
+    <div class="sm">WORKING LOCATION</div><select id="wp">${opts(S.prov,cur?.province_id)}</select><select id="wd"></select><button id="sv">Save changes</button><div id="msg" class="err"></div></div>
+    <div class="card sm">Verification: ${esc(p.verification_status)} (identity and business uploads are coming in a later phase) · Notification preferences, subscriptions and payment settings are coming soon.</div><button class="alt" id="out">Sign out</button>`;
+    const f=()=>$('#wd').innerHTML=dOpts($('#wp').value,p.working_district_id);$('#wp').onchange=f;f();
+    $('#sv').onclick=async()=>{const un=$('#un').value.trim().toLowerCase(),fn=$('#fn').value.trim();if(!fn)return $('#msg').textContent='Name is required';if(un&&!/^[a-z0-9_]{3,20}$/.test(un))return $('#msg').textContent='Username: 3-20 letters, numbers or _';
+      const u={full_name:fn,username:un||null,phone:$('#ph').value.trim(),bio:$('#bio').value.trim(),skills:$('#sk').value.split(',').map(x=>x.trim()).filter(Boolean),working_district_id:+$('#wd').value};
+      const {error}=await db.from('profiles').update(u).eq('id',p.id);if(error)return $('#msg').textContent=error.message.includes('username')?'That username is taken':error.message;Object.assign(p,u);S.pt='Overview';main();};
+    $('#out').onclick=async()=>{S.ch&&db.removeChannel(S.ch);S.ch=null;await db.auth.signOut();S.profile=null;$('#bell').hidden=true;boot();};
+  }
+}
+
+document.addEventListener('click',e=>{const c=e.target.closest('.job');if(c)jobView(c.dataset.id);});
+async function jobView(id){
+  app.innerHTML='<div class="card">Loading…</div>';
+  const {data:j,error}=await db.from('jobs').select('*,districts(name),categories(name)').eq('id',id).single();
+  if(error)return app.innerHTML=`<div class="card err">${esc(error.message)}</div>`;
+  const mine=j.poster_id==S.user.id,open=ACTIVE.includes(j.status);
+  let h=`<button class="alt" id="bk">← Back</button><div class="card"><h3>${esc(j.title)}</h3><div class="big" style="font-size:22px">${K(j.budget_zmw)}</div><span class="tag">${esc(j.status)}</span><span class="tag">${j.classification=='official'?'Official':'Unofficial'}</span><span class="tag">${j.negotiable?'Negotiable':'Fixed price'}</span><span class="tag">${esc(j.districts?.name||'Anywhere in Zambia')}</span><p>${esc(j.description)}</p>${j.requirements?'<div class="sm">REQUIREMENTS</div><p>'+esc(j.requirements)+'</p>':''}</div>`;
+  if(mine){
+    const {data:ap}=await db.from('job_applications').select('*,profiles!applicant_id(full_name,verification_status)').eq('job_id',id).order('created_at');
+    h+='<h3>Applicants</h3>'+(ap&&ap.length?ap.map(a=>`<div class="card"><b>${esc(a.profiles?.full_name)}</b> <span class="tag">${esc(a.status)}</span><p>${esc(a.intro)}</p><button class="alt" data-msg="${a.applicant_id}">Message</button><div class="sm">${a.proposed_price_zmw?'Offer '+K(a.proposed_price_zmw)+' · ':''}${esc(a.estimated_time||'')}</div>${a.status=='pending'&&open?`<button data-acc="${a.id}">Accept</button><button class="alt" data-rej="${a.id}">Reject</button>`:''}</div>`).join(''):'<div class="card sm">No applications yet.</div>');
+    const nx={assigned:['in_progress','Start work'],in_progress:['completed','Mark completed']}[j.status];
+    if(nx)h+=`<button data-st="${nx[0]}">${nx[1]}</button>`;
+    if(['published','applications_open','assigned','in_progress'].includes(j.status))h+=`<button class="alt" data-st="cancelled">Cancel job</button>`;
+    if(j.status=='completed')h+='<div class="card sm">Payment is settled directly between you and the worker. Off-platform payments are not covered by platform protection.</div>';
+  }else if(open){
+    const {data:mineApp}=await db.from('job_applications').select('id').eq('job_id',id).eq('applicant_id',S.user.id).maybeSingle();
+    h+=mineApp?'<div class="card sm">You have applied for this job.</div>':`<div class="card" id="apf"><h3>Apply for this job</h3><div class="sm" id="quota"></div><textarea id="in" placeholder="Introduce yourself and your relevant skills"></textarea>${j.negotiable?'<input id="pr" type="number" min="1" placeholder="Your price (ZMW)">':''}<input id="tm" placeholder="Estimated time (e.g. 2 days)"><input id="pf" placeholder="Portfolio link (optional)"><button id="ap">Submit application</button><div id="msg" class="err"></div></div>`;
+  }
+  h+=await extras(j,mine);
+  app.innerHTML=h;
+  bindExtras(j);
+  $('#bk').onclick=()=>main();
+  const act=async(p,msg)=>{const {error}=await p;error?alert(error.message):jobView(id);};
+  app.querySelectorAll('[data-acc]').forEach(b=>b.onclick=()=>act(db.rpc('accept_application',{app_id:b.dataset.acc})));
+  app.querySelectorAll('[data-rej]').forEach(b=>b.onclick=()=>act(db.from('job_applications').update({status:'rejected'}).eq('id',b.dataset.rej)));
+  app.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>confirm('Are you sure?')&&act(db.rpc('set_job_status',{p_job:id,p_status:b.dataset.st})));
+  if($('#ap'))$('#ap').onclick=async()=>{
+    if(S.busy)return;if(!$('#in').value.trim())return $('#msg').textContent='Write a short introduction.';
+    S.busy=true;$('#ap').textContent='Sending…';
+    const {error}=await db.from('job_applications').insert({job_id:id,applicant_id:S.user.id,intro:$('#in').value.trim(),
+      proposed_price_zmw:$('#pr')&&$('#pr').value?+$('#pr').value:null,estimated_time:$('#tm').value.trim(),portfolio_url:$('#pf').value.trim()});
+    S.busy=false;error?($('#ap').textContent='Submit application',gateMsg('#msg',error)):(await refreshMe(),jobView(id));};
+}
+
+const FREE=5;
+async function refreshMe(){const {data}=await db.from('profiles').select('*').eq('id',S.user.id).single();if(data)S.profile=data;}
+function gateMsg(sel,e){const el=$(sel);if(e.message.includes('SUBSCRIPTION_REQUIRED')){el.innerHTML='You have used your free allowance. <a href="#" id="gp">Choose a plan to continue</a>';$('#gp').onclick=ev=>{ev.preventDefault();S.tab='profile';S.pt='Plans';main();};}else el.textContent=e.message;}
+boot().then(()=>{const m=location.hash.match(/job=([\w-]+)/);if(m&&S.profile)jobView(m[1]);});
+</script></body></html>
