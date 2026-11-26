@@ -1,30 +1,27 @@
-SHAMLOKO — SOCIAL PROFILE PHOTO UPDATE
+SHAMLOKO — APPLICANT MANAGEMENT UPDATE
 
 FILES
-- index.html: Updated main SHAMLOKO application.
-- admin.html: Current SHAMLOKO admin dashboard with revenue overview, included unchanged.
-
-WHAT CHANGED IN THE MAIN APP
-1. Job feed cards show the job poster's circular profile photo beside their name.
-2. The job detail page shows the poster's profile photo and name above the job information.
-3. Job comments and replies show each commenter's profile photo.
-4. Inbox conversation previews show the other member's profile photo.
-5. The conversation header and every message bubble show the sender's profile photo.
-6. Applicant rows also show applicants' profile photos.
-7. If a member has not uploaded a photo, SHAMLOKO shows a circular initial avatar instead.
+- index.html: updated main application frontend.
+- admin.html: matching admin page, unchanged.
+- applicant_management.sql: Supabase migration required for secure applicant selection and qualification access.
 
 INSTALLATION
-1. Make a backup of the currently deployed index.html.
-2. Replace the deployed main index.html with this package's index.html.
-3. Keep admin.html as your admin page (this copy retains the current revenue dashboard).
-4. Publish/deploy the updated files and refresh the site.
+1. Back up the current deployed index.html and admin.html.
+2. In Supabase SQL Editor, run applicant_management.sql.
+3. Confirm the SQL finishes successfully.
+4. Replace the deployed index.html with this package's index.html.
+5. Keep admin.html as supplied (it is included for a matched package; it does not need functional changes for this feature).
+6. Publish/deploy and hard-refresh the website.
 
-DATABASE REQUIREMENTS
-- No SQL migration is required for this visual update.
-- The existing profiles.photo_url field and avatars storage bucket are reused.
-- Members' existing profile photos are displayed automatically; no one needs to upload again.
-- New photos will appear wherever the member is shown after the profile photo is saved.
+WHAT CHANGES
+- Profile > Posted lists each job separately with its application count and a View applicants and job action.
+- Job owners can review applicants' introduction, skills, bio, verification status, portfolio and uploaded qualifications.
+- Qualification files are opened through short-lived signed URLs; the SQL adds a Storage SELECT policy scoped to posters whose jobs the applicant applied to.
+- Selecting a candidate invokes the new select_job_applicant RPC. It calls the existing accept_application RPC first (to preserve the existing assignment workflow), closes the job by setting status to assigned, and rejects all other pending applications.
+- Assigned jobs disappear from the home feed because the existing feed only displays published and applications_open jobs.
+- Profile > Applications shows pending and selected applications. Rejected applications are intentionally excluded.
 
-VALIDATION
-- The updated JavaScript passed a syntax check.
-- Existing authentication, jobs, applications, comments, messaging and admin flows were retained.
+IMPORTANT COMPATIBILITY NOTES
+- The migration intentionally reuses the existing public.accept_application(uuid) function used by the current app. If that function is missing or has a different signature in your Supabase project, the migration will fail when the new RPC is called; send the exact error before changing anything else.
+- The qualification document policy assumes the existing private Storage bucket is named 'qualifications' and uploads use the existing path format user_uuid/filename, as in the current frontend.
+- This package does not alter admin authentication, payment logic, existing users, or existing application records.
